@@ -14,7 +14,10 @@ Audit set + human-typed prompt record for the pk33 cleanup and rework planning, 
 
 Read them in order. Audit #4 is written to be read standalone.
 
-## 📍 Repo location — moved to the `pk33backupsv1` org (2026-11-02)
+## 📍 Repo location — `pk33backupsv1` is the CANONICAL home (pk ruling, 2026-11-02)
+
+> **`pk33backupsv1` is canonical. `awgbackups` is SKIPPED** — do not create,
+> push to, or migrate anything there.
 
 This repo was **shifted** from `~/awgbackups/pk33-cleanup` to
 `~/pk33backupsv1/pk33-cleanup` and its remote repointed to the

@@ -289,3 +289,126 @@ reader — out of scope and risky.
 - The zdash222 force-push (origin is pk31, which is down).
 - The zprotocols cron (needs pk's answer).
 - `~/.trash-20261102/opencode-log` (105 MB).
+
+---
+
+## Phase 4c — 2026-11-02: the intake append fix (the audit #1 CPU hog, actually fixed)
+
+### The canonical home (pk ruling)
+
+> **`pk33backupsv1` is the CANONICAL GitHub home for pk33's seat work.
+> `awgbackups` is SKIPPED** — do not create, push to, or migrate anything there.
+
+`awgbackups` has zero members and `pk-szt6` is not one, so it cannot be written
+from this box (`CreateRepository` refused). It was created 2026-10-30T21:14:14Z
+— 16 minutes before the first attempt — and has never been populated.
+`pk-szt6/pk33-cleanup` is a **stale mirror** from 2026-10-30/31; it is superseded
+by `pk33backupsv1/pk33-cleanup` and should not be pushed to.
+
+Recorded in: both seats' `AGENTS.md` §0, and `pk33-cleanup/README.md`.
+
+### The fix
+
+Audit #1 identified the defect (a full-log rescan per append) but did not fix it.
+On 2026-11-02 it was **actively burning a core every 10 minutes at 96 °C**.
+
+| | |
+|---|---|
+| Root cause | `intake.append()` computed the next seq with `_scan_max_seq()` — a full read of the log. `append_many()` called `append()` per event, so a 76-event feed rescanned a 93 MB log **76 times**. The rc log is on an **HDD bind-mount**, so each scan was also a spin-disk read. |
+| zcons1 commit | `944d51b` (pushed to `zexp1/zcons1`) |
+| efus3 pointer | `ccec0c63e` |
+
+**Measured on the real 93 MB rc log, old vs new, same input:**
+
+    OLD: append_many(76 events) = 34.07 s
+    NEW: append_many(76 events) =  0.00 s
+
+**Output byte-identical** — 226,362 lines compared one by one: same seqs, same
+kinds, same payloads, same provenance.
+
+**Two changes, both keeping the ONE-WRITER LAW intact:**
+
+1. `_tail_max_seq()` — the intake log is append-only and never rewritten, and
+   every append takes the flock, so seqs increase **in file order** and the last
+   parseable line carries the max. Reading the last 64 KB gives the same answer
+   at O(tail). It is used **only when it proves the answer**: it returns `None`
+   on a malformed or unordered tail, and the caller then pays the full scan.
+   Correctness never depends on the heuristic.
+2. `append_many()` scans **once** for the whole batch and assigns
+   base+1, base+2, ... under the same flock the single append takes. The
+   invariant is unchanged — seqs strictly increase, assigned and written under an
+   exclusive lock, so a concurrent appender still observes every prior append
+   and still gets a strictly larger seq. A batch is now **atomic** where it
+   previously was not, which is strictly stronger.
+
+**Tests:** `ssot_engine/tests/test_intake_append_perf.py` (new, 6 tests) pins the
+batch semantics, the one-scan-per-batch property, tail/full-scan agreement, the
+malformed-tail refusal, and atomicity. Suite: **22 passed** (16 pre-existing +
+6 new).
+
+**The wider `tests/` suite is unchanged by this commit** — 42 failed / 241 passed
+**both before and after**. The failures are pre-existing and unrelated; verified
+by re-running with the original `intake.py` restored and getting the identical
+counts.
+
+**Live proof (the same workload, one hour apart):**
+
+| | tick | rc log written | elapsed |
+|---|---|---|---|
+| old code | 03:48:06 | 03:48:46 | **40 s** |
+| fixed code | 03:58:03 | 03:58:03 | **< 1 s** |
+
+The log grew by exactly 76 events (seq 226286 → 226361), strictly increasing,
+unique, no collision. **CPU package: 96 °C → 34 °C.**
+
+### A historical defect found while verifying (NOT caused by this fix)
+
+The rc log contains **2 duplicate seqs**: 637 and 638, each appearing twice, from
+**2026-07-02** — nine hours apart (`10:27` and `19:50`), both from
+`emitter:iops_deploy_dev`. That is the old `append()` racing under the flock
+**before** the current locking discipline, or a pre-flock writer. It is **three
+months old** and predates every change in this ledger.
+
+**Not fixed here** — the drain handles duplicates by checkpoint, and repairing
+historical seqs in a durable log is a separate, deliberate operation. Recorded
+as an open item.
+
+### The `pk` registry reconciliation
+
+Seat B found `pk` is a **live machine** (audit #4 had called it "a hostname you
+no longer have"). Reconciled rather than discarded:
+
+| # | date | class | target | action | reason | reversible | recovery |
+|---|---|---|---|---|---|---|---|
+| 4.23 | 2026-11-01T20:05Z | config | `pk`'s own registry | 8 rows `DEAD-UNTRIAGED` → `ACTIVE`; pk commit `da607cb44` | all 8 are live in pk's crontab and their commands resolve to real paths on that host. `DEAD-UNTRIAGED` means "a human ruled on this, stop re-alarming" — no such ruling applies, they are running. | yes | `git revert da607cb44` |
+| 4.24 | 2026-11-01T20:06Z | config | pk33's copy of the shared registry | the same 8 rows; pk33 commit `36804eccb` | the registry is shared — a stale copy re-seeds the wrong state | yes | `git revert 36804eccb` |
+| 4.25 | 2026-11-01T20:08Z | config | the 6 pk rows marked `DISABLED` | **verified, no change** | all 6 are genuinely absent from pk's crontab — those labels stand | — | — |
+
+**Also found on `pk` (not fixed from pk33 — it is pk's own estate):** 28 jobs run
+on pk but are registered under machine `pk33`, so pk's `verify` cannot see them
+and `heal` cannot repair them. Their commands point at `/home/pk/`, so they are
+pk's own jobs, misfiled. Plus 57 `#PAUSED20260711` comment lines — the residue of
+the July runaway, **stable** (111 → 111 lines over 60 s; the `heal` guards are
+present). Full analysis: `~/pk33backupsv1/pk33-recovery-nov2026/docs/FLEET-AUDIT.md`.
+
+### B2 freshness — the ncerts corpus IS redundant
+
+Verified before treating the 131 GB local corpus as prunable:
+
+    local  /home/pk33/zsm-ncert-20260919/ncert-pdfs : 1,025 files, 140,599,609,820 bytes
+    B2     b2-remote:zsm-ncert/ncert-pdfs-20260919   : 1.025k objects, 140,599,609,820 bytes
+
+**Byte-identical.** The corpus is safely prunable or shiftable — B2 is a live
+off-box tier (unlike `aw:~/awgbackups`, which is **empty**).
+
+### Not done
+
+- **The 131 GB ncerts shift/delete** — verified redundant against B2, but the
+  action itself is pk's call (shift to HDD vs delete outright).
+- **The 22 clean worktrees** — now known to be safe (their tips are in the SSOT
+  at `311036bb`), but the **2 dirty ones** must be committed or archived first
+  (26 files, incl. `packages/api/src/durable-learn-store.ts`).
+- **The broad cron pause**, the **zdash222 force-push** (origin is pk31, down),
+  the **zprotocols cron** (needs pk's answer), and **pk's 28 mis-scoped rows**
+  (pk's own estate).
+- **The historical duplicate seqs 637/638** in the rc log.
