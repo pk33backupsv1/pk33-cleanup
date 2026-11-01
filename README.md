@@ -14,70 +14,56 @@ Audit set + human-typed prompt record for the pk33 cleanup and rework planning, 
 
 Read them in order. Audit #4 is written to be read standalone.
 
-## ⚠️ Repo location: needs transferring to the `awgbackups` org
+## 📍 Repo location — moved to the `pk33backupsv1` org (2026-11-02)
 
-The intended destination was the GitHub org **`awgbackups`**, but the push could not complete there:
+This repo was **shifted** from `~/awgbackups/pk33-cleanup` to
+`~/pk33backupsv1/pk33-cleanup` and its remote repointed to the
+**`pk33backupsv1`** org.
 
-    $ gh repo create awgbackups/pk33-cleanup
-    GraphQL: pk-szt6 does not have the correct permissions to execute `CreateRepository` (createRepository)
+The original `awgbackups` org could not be written:
 
-The org exists but **`pk-szt6` is not a member of it**:
+```
+$ gh repo create awgbackups/pk33-cleanup
+GraphQL: pk-szt6 does not have the correct permissions to execute `CreateRepository`
+```
 
-    $ gh api orgs/awgbackups/members/pk-szt6
-    {"message":"User does not exist or is not a member of the organization","status":"404"}
+`awgbackups` exists (created 2026-10-30T21:14:14Z) but has **zero members** —
+`pk-szt6` is not one of them. Everything on this box authenticates as
+`pk-szt6` (one `gh` token, three SSH keys all resolving to that identity, no
+other credentials in env, secret stores, or shell history). The
+**`pk33backupsv1`** org works and is where the working folders now live.
 
-    $ gh api orgs/awgbackups --jq '{created_at, members_count, public_repos}'
-    {"created_at":"2026-10-30T21:14:14Z","members_count":null,"public_repos":0}
+**Current remote:**
 
-    $ gh api 'orgs/awgbackups/members?per_page=100' --jq 'length'
-    0
+```
+git@github.com:pk33backupsv1/pk33-cleanup.git
+```
 
-The org was created at **2026-10-30T21:14:14Z** — about 16 minutes before this repo was set up — and has **zero members and zero repositories**. It appears to have been created from a session authenticated as a *different* GitHub identity than the one on this box.
+### The pk33backupsv1 org — the working seat structure
 
-**Everything on this box authenticates as `pk-szt6`:**
+| Repo | What it is |
+|---|---|
+| [`pk33backupsv1/pk33-cleanup`](https://github.com/pk33backupsv1/pk33-cleanup) | **this repo** — the audit set, the execution ledger, `human_typed.md` |
+| [`pk33backupsv1/pk33-recovery-nov2026`](https://github.com/pk33backupsv1/pk33-recovery-nov2026) | **RECOVER** seat — zsm1, zcontent1, zncert-w1, zcons1, the Gitea seat, the fleet. `AGENTS.md`, protocols v1.1.1, directives v1.1.1, `docs/STATE.md`, `docs/RECOVERY-PLAN.md`, `docs/CORRECTIONS.md`, `docs/SYNTHESIS.md`, handover 1.0.0 |
+| [`pk33backupsv1/pk33-intelligence-recreate-nov2026`](https://github.com/pk33backupsv1/pk33-intelligence-recreate-nov2026) | **RECREATE** seat — the code KG, ctx packs, project graphs, KG index, embeddings. `docs/INVENTORY.md`, `docs/RECREATE-DESIGN.md`, `docs/THROW-AWAY.md` |
 
-- `gh` CLI token (`~/.config/gh/hosts.yml`) — one token only, and shell history shows exactly one token ever used here
-- SSH keys `id_ed25519_github_1785153294`, `id_ed25519_pk33_github`, `id_ed25519_zgate_cloud` — all three authenticate as `pk-szt6`
-- `/home/zdash22x` and `/root` have no gh credentials
-- no other `ghp_` / `github_pat_` token found in env, secret stores, or history
+Local paths:
 
-**So the content is published to `pk-szt6/pk33-cleanup` — a public repo that works — and the org transfer is one click for whoever owns the org.**
+```
+~/pk33backupsv1/pk33-cleanup/
+~/pk33backupsv1/pk33-recovery-nov2026/
+~/pk33backupsv1/pk33-intelligence-recreate-nov2026/
+```
 
-### How to complete the transfer
+### What happened on 2026-11-02
 
-**Option A — transfer the existing repo (preserves history, issues, stars):**
-
-1. Open <https://github.com/pk-szt6/pk33-cleanup> → **Settings**
-2. **Danger Zone** → **Transfer ownership**
-3. Type `awgbackups` and confirm
-4. Accept the transfer in the `awgbackups` org (requires org owner)
-
-**Option B — add `pk-szt6` to the org, then re-push:**
-
-1. In the `awgbackups` org: **Settings → People → Invite people** → add `pk-szt6` with role `admin` (or `write`)
-2. Accept the invitation (as `pk-szt6`)
-3. On this box:
-
-       cd ~/awgbackups/pk33-cleanup
-       gh repo create awgbackups/pk33-cleanup --public --source=. --remote=org --push
-       git remote set-url origin git@github.com:awgbackups/pk33-cleanup.git
-
-**Option C — if the org should have a different owner identity**, add that identity's token to `~/.config/gh/hosts.yml` and the same `gh repo create` command will work.
-
-### Local state
-
-The working copy at `~/awgbackups/pk33-cleanup` is a complete git repo with the full history:
-
-    52eb240  PK33 cleanup: audit set #1-#4 + human-typed prompt record
-
-`origin` currently points at `pk-szt6/pk33-cleanup`. Once the org has the repo, repoint it:
-
-    git remote set-url origin git@github.com:awgbackups/pk33-cleanup.git
-    git push -u origin main
-
-Note: `~/.gitconfig` has `insteadOf = git@github.com:` → `https://github.com/`, so SSH-form remotes are rewritten to HTTPS and authenticated via the `gh` credential helper.
-
----
+| | |
+|---|---|
+| **+244 GB freed on the SSD** | 77% -> 49% used; the 244 GB `opencode.db` event log deleted after its 6.9 GB of real content was salvaged to the HDD |
+| the credentials survived | `~/.secrets1` created; the opencode credential files became symlinks into it |
+| the pause became durable | the six `DISABLED` zk registry rows were **committed** (`efus3` `4e4599808`) — they were previously uncommitted, so one `git checkout` would have re-armed the pause |
+| the guard got a scheduler | `opencode-db-guard` installed via `pcl_selfcron.sh` (registry now 104 entries) |
+| three seats attacked the plan | and **found three audit errors and three missed problems** — see `pk33-recovery-nov2026/docs/SYNTHESIS.md` |
 
 ## Scope and safety
 
