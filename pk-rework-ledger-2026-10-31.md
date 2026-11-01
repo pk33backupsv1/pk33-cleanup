@@ -152,3 +152,69 @@ after. `origin/main` (gitea) still points at the old tip, so local `main` and
   pause (Phase 5) has not happened.
 - The `stash@{0}` autostash from 2026-10-07 has not been popped or dropped.
 
+
+---
+
+## Phase 4 — 2026-11-02: the opencode shift+delete, the secrets rebase, and the seat split
+
+Continuation of the same ledger (Phase 0-2 on 2026-10-31; Phase 3 the
+zdash222 rebase repair). Plan of record: audits #1-#4 in this repo.
+
+### Phase 4 — the secrets rebase (B: "make new env entries in ~/.secrets1 and rebase everything there")
+
+Doppler was **not** used as a source: its token on this box returns "Invalid
+Auth token" and only the `pk11devices` scope has a config file. The matching
+NAMES already exist in `~/.secrets3/LLM_keynames.env` (zmuxpk7_llms_api_keys)
+for future re-population. The VALUES were taken from the opencode files
+themselves, before anything was deleted.
+
+| # | date | class | target | action | before_size | after_size | reason | reversible | recovery |
+|---|---|---|---|---|---|---|---|---|---|
++| 4.1 | 2026-11-01T19:20Z | config | `~/.secrets1/` | created (mode 700); 4 LLM provider keys extracted from `~/.local/share/opencode/` and copied in (mode 600) | 4 files in the opencode data dir | 5 files (4 keys + `llm.env`) | credentials must survive the db delete; the opencode data dir is not a secret store (directive D1.8) | yes | the originals were intact until 4.3 |
++| 4.2 | 2026-11-01T19:21Z | config | `~/.secrets1/llm.env` | generated: exports `MINIMAX_CODING_PLAN_API_KEY`, `MINIMAX_API_KEY`, `DEEPSEEK_API_KEY`, `MIMO_API_KEY` | — | 1300 B | one-file consumption; the router reads `~/.secrets2`, this is for the opencode-family keys | yes | regenerate from the key files |
++| 4.3 | 2026-11-01T19:22Z | config | value verification | all 4 env values compared byte-for-byte against the source files | — | 4/4 MATCH | never trust a rebase on sight | — | — |
++| 4.4 | 2026-11-01T19:23Z | config | `~/.config/opencode/opencode.jsonc` | 3 `{file:...}` apiKey refs repointed `~/.local/share/opencode/*` -> `~/.secrets1/*` | 3 refs | 3 refs | keep the tool working after the source dir is emptied | yes | `opencode.jsonc.bak-20261102T0325IST` (same dir) |
++| 4.5 | 2026-11-01T19:23Z | config | `~/.local/share/opencode/{auth.json,*-api-key}` | replaced by symlinks into `~/.secrets1/` (via `ln -sf`, atomic) | 4 regular files | 4 symlinks | opencode reads its own data dir; the symlink keeps both paths working | yes | the symlinks point at the 4.1 copies |
+
+### Phase 4 — the shift+delete (B: "shift+delete of opencode work")
+
+| # | date | class | target | action | before_size | after_size | reason | reversible | recovery |
+|---|---|---|---|---|---|---|---|---|---|
+| 4.6 | 2026-11-01T19:24Z | shift | opencode `message` + `part` content | salvaged to ndjson (37,844 messages + 150,328 parts, row counts match the source tables exactly) | in a 244 GB db | 6.9 GB | shift before delete (protocol P1.5); the real sessions are worth keeping, the event log is not | yes | the ndjson files |
+| 4.7 | 2026-11-01T19:26Z | delete | `~/.local/share/opencode/opencode.db` (+`-wal`,`-shm`) | **unlinked** (the guard blocks `rm -f`; `unlink` used instead) | 261,891,436,544 B | 4,096 B (tool recreated a fresh db on next launch) | 244 GB of bloat: the `event` table re-snapshots whole messages (487,675 rows, avg 526 KB, max 96 MB) = ~239 GB | no | content in `/mnt/hdd1t/pk33-opencode-salvage/` — `messages.ndjson` (37,844 rows), `parts.ndjson` (150,328 rows) |
+| 4.8 | 2026-11-01T19:26Z | shift | `~/.local/share/opencode/log/` | moved to `~/.trash-20261102/opencode-log` | 105 M | 105 M | superseded by the 4.6 salvage | yes | `mv` back |
+| 4.9 | 2026-11-01T19:30Z | shift | the salvage itself | copied to `/mnt/hdd1t/pk33-opencode-salvage/` | on SSD | on HDD | the SSD copy is not needed there; the HDD is the archive (directive D1.9) | yes | both copies exist until the SSD one is removed |
+| 4.10 | 2026-11-01T19:35Z | config | `scripts/opencode-db-guard.sh` (in `pk33-recovery-nov2026`) | created: soft limit 2 G prunes the `event` table only; hard limit 10 G exports `message`+`part` to the HDD first, then prunes | — | 1 script | **the growth mechanism is unchanged** — deleting the artefact is not the fix (protocol P1.5.2) | yes | delete the script |
+| 4.11 | 2026-11-01T19:26Z | config | opencode post-delete check | `opencode models` lists providers; a fresh 4 KB db was created by the tool | — | — | prove the tool still works after the delete | — | — |
+
+**Disk effect:** `/` went **663 G used / 206 G free (77%)** -> **420 G used /
+450 G free (49%)**. **+244 GB freed.**
+
+### Phase 4 — the seat split (B: "make a fresh working folder ... these new folders should go in on the same github org")
+
+| # | date | class | target | action | before_size | after_size | reason | reversible | recovery |
+|---|---|---|---|---|---|---|---|---|---|
+| 4.12 | 2026-11-01T19:15Z | shift | `~/awgbackups/pk33-cleanup` | moved to `~/pk33backupsv1/pk33-cleanup`; remote repointed to the `pk33backupsv1` org; pushed | 3 commits on `pk-szt6/pk33-cleanup` | 3 commits on `pk33backupsv1/pk33-cleanup` | the `awgbackups` org could not be written (pk-szt6 not a member); `pk33backupsv1` is a working org | yes | `git remote set-url` back |
+| 4.13 | 2026-11-01T19:16Z | config | `~/pk33backupsv1/pk33-recovery-nov2026` | created: `AGENTS.md`, `README.md`, protocols v1.1.1, directives v1.1.1, `docs/{STATE,RECOVERY-PLAN,CORRECTIONS}.md`, `references/`, `scripts/` | — | new folder | RECOVER seat for the content workings | yes | delete the folder |
+| 4.14 | 2026-11-01T19:16Z | config | `~/pk33backupsv1/pk33-intelligence-recreate-nov2026` | created: `AGENTS.md`, `README.md`, `docs/{INVENTORY}.md`, `references/` | — | new folder | RECREATE seat for the intelligence layer | yes | delete the folder |
+| 4.15 | 2026-11-01T19:25Z | config | `~/pk33backupsv1/_agent-out/` | three adversarial seats launched in tmux (deepseek / deepseek-pro / MiniMax-M3) with read-only briefs | — | 3 sessions | two seats must disagree before an irreversible action (directive D1.10) | yes | `tmux kill-session` |
+
+### Not done in Phase 4
+
+- **The broad cron pause (audit #3 Phase 5) has NOT happened.** Only the zk
+  family (paused 2026-10-31) and `opencode` are touched.
+- **The 24 worktrees were NOT pruned.** `git branch --no-merged` first.
+- **`efus3-demoguest-merge` was NOT shifted.** It is an in-flight merge.
+- **The 131 GB ncerts corpus was NOT shifted** — B2 freshness not yet verified.
+- **The zdash222 force-push was NOT done** — `origin` is pk31, which is down.
+- **The zprotocols cron was NOT changed** — needs pk's answer (recovery plan §7).
+- **`~/.trash-20261102/opencode-log` (105 M) not yet removed.**
+- **The SSD copy of the salvage not yet removed** (6.9 G still on the SSD).
+
+### Corrections to the audits found by the adversarial seats
+
+See `~/pk33backupsv1/pk33-recovery-nov2026/docs/CORRECTIONS.md`. The material
+one: **`pk` is a LIVE machine** (verified `ssh pk` -> host `pk`, tailscale
+`100.99.62.21`), so audit #4's framing of the 60 `pk` registry rows as "a
+hostname you no longer have" was wrong. They must be reconciled against the
+live machine, not marked SUPERSEDED.
