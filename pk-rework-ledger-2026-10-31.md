@@ -412,3 +412,58 @@ off-box tier (unlike `aw:~/awgbackups`, which is **empty**).
   the **zprotocols cron** (needs pk's answer), and **pk's 28 mis-scoped rows**
   (pk's own estate).
 - **The historical duplicate seqs 637/638** in the rc log.
+
+---
+
+## Phase 4d — 2026-11-02: everything committed and pushed
+
+Final state of the push. Other machines (pk31, pk32, aw) are switched off, so
+their remotes were not touched — noted, not worried about.
+
+| # | date | class | target | action | reason | reversible | recovery |
+|---|---|---|---|---|---|---|---|
+| 4.26 | 2026-11-01T20:30Z | commit | `zexp1/efus3` | rebased 5 local commits onto `origin/main` and pushed: `5feadb128..04442a420` | the remote had moved (10 commits — the demoguest-merge superset); the rebase conflicted in `registry.tsv` | yes | `backup/pre-push-20261102-final` (local) + `git revert` |
+| 4.27 | 2026-11-01T20:32Z | config | `efus3` registry — conflict resolution | took **my** side: the six zk rows stay `DISABLED` with the reason; the remote's 4 dropped pk33 rows were **restored** | the remote still had all six zk crons `ACTIVE` — taking the remote side would have re-armed the pause. The 4 rows the remote dropped were re-added (the conflict was a row-range overlap, not a real deletion) | yes | the commit is in the rebase history |
+| 4.28 | 2026-11-01T20:35Z | config | `efus3` — `skills/afed-bfed/SKILL.md` | local edit **superseded** by the remote version; the local text was confirmed already relocated to `zdash22x/zbfed/docs/protocols/BOT-FIRST.md` | the remote moved the protocol to a dedicated kit — the local copy was the older form of the same content | yes | `stash@{1}` still holds the local edit |
+| 4.29 | 2026-11-01T20:40Z | commit | `zdash22x/zdash222` | published the 82-commit rebase-repair line to the GitHub mirror as branch **`recovery/2026-10-31-rebase-repair`** — NOT to `main` | `main` on the mirror is 2 commits behind and a merge would need `--force-with-lease`; that is **pk's open decision #4**, so it was not taken unilaterally. A branch is durable and non-destructive | yes | `git push origin --delete recovery/2026-10-31-rebase-repair`; both tips also on `backup/pre-rebase-main-2026-10-31` and `backup/detached-line-2026-10-31` |
++| 4.30 | 2026-11-01T20:45Z | commit | `pk33backupsv1/pk33-cleanup` | added `references/agent-out/` — the canonical originals of the three seats' briefs + findings | the briefs were authored outside any repo; copies were already in both seat repos | yes | `git rm -r references/agent-out` |
+
+### Push ledger — what is on GitHub
+
+| repo | head | what |
+|---|---|---|
+| `pk33backupsv1/pk33-cleanup` | `85234ff` | audits #1–#4, the ledger (Phases 0–4d), `human_typed.md`, agent-out originals |
+| `pk33backupsv1/pk33-recovery-nov2026` | `56dfa10` | RECOVER seat: AGENTS, protocols v1.1.1, directives v1.1.1, STATE, RECOVERY-PLAN, CORRECTIONS, SYNTHESIS, FLEET-AUDIT, handover 1.0.0 + 1.1.0, worktree-salvage |
+| `pk33backupsv1/pk33-intelligence-recreate-nov2026` | `7225479` | RECREATE seat: AGENTS, INVENTORY, RECREATE-DESIGN, THROW-AWAY, references |
+| `zexp1/efus3` | `04442a420` | the ledger, the registry fix (zk `DISABLED` + pk reconciled), the zcons1 pointer |
+| `zexp1/zcons1` | `944d51b` | **the intake append fix** — 34.07 s → 0.00 s per feed |
+| `zexp1/zsm1` | `311036bb` | SSOT, unchanged; plus `archive/wip/pk33/*` = the salvaged worktree tips |
+| `zdash22x/zdash222` | `recovery/2026-10-31-rebase-repair` | the 82-commit rebase-repair line (not on `main` — pk's decision) |
+
+### Left deliberately uncommitted (all live cron churn, not work)
+
+| Repo | dirty | what |
+|---|---|---|
+| `efus3` | 211 | `_logs/**` ndjson, `pk-console` pulse files, `ssot_engine_efus3/{dc,rc}/intake.ndjson` — rewritten every cycle |
+| `zcons1` | 10 | the zcons **self-spine** live state (`intake.ndjson`, `spine.sqlite`, `projection.json`, `_prober/`, `coverage/`, `shr/logs/`) |
+| `zcontent1` | 621 | 562 `docs/history/CURRENT/*.tsv.gz` + embed logs |
+| `zdash222` | 65 | `_logs/gates/**` + registers |
+
+Committing these would re-dirty the tree within one cron cycle — the reason the
+broad cron pause (RECOVERY-PLAN §3) is the step that makes the git cleanup
+meaningful.
+
+### One deliberate non-push
+
+`zsm1-tzerp` (the read-only archive) has 1 unpushed commit — the
+`README: read-only archive notice` — and its GitHub remote is **archived and
+read-only** (403). The commit is retained locally and the same notice is in the
+SSOT's README (`efus3/zsm1`, "SSOT notice (2026-09-16)"), so nothing is lost.
+
+### Not touched (other machines switched off)
+
+- `pk31` — down 4d. Hosts the primary Gitea (the `origin` for efus3/zsm1/
+  zcontent1/zdash222) and the bge-m3 GPU/embed box. **The GitHub mirrors
+  covered for it**, so the audit + recovery work was publishable anyway.
+- `pk32` — down 23d.
+- `aw` — down 86d on the tailnet; `~/awgbackups` is empty (no off-box tier there).
