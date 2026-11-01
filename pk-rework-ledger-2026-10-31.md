@@ -218,3 +218,74 @@ one: **`pk` is a LIVE machine** (verified `ssh pk` -> host `pk`, tailscale
 `100.99.62.21`), so audit #4's framing of the 60 `pk` registry rows as "a
 hostname you no longer have" was wrong. They must be reconciled against the
 live machine, not marked SUPERSEDED.
+
+---
+
+## Phase 4b — 2026-11-02 (late): the adversarial review's fixes, and the secrets reconciliation
+
+Triggered by the three adversarial seats (`../_agent-out/ADVERSARY_*_FINDINGS.md`).
+Full analysis: `~/pk33backupsv1/pk33-recovery-nov2026/docs/SYNTHESIS.md`.
+
+### Fixes applied for defects the seats found
+
+| # | date | class | target | action | before_size | after_size | reason | reversible | recovery |
+|---|---|---|---|---|---|---|---|---|---|
+| 4.16 | 2026-11-01T19:41Z | config | `efus3/_logs/agent-crons/registry.tsv` | committed the six zk rows as `DISABLED` **with the reason appended to `purpose`**; efus3 commit `4e4599808` | working tree only (HEAD had all six `ACTIVE`) | committed | the pause was ONE `git checkout` from being re-armed — the registry is tracked and was dirty | yes | `git revert 4e4599808` (which re-arms the pause) |
+| 4.17 | 2026-11-01T19:42Z | config | `opencode-db-guard` | installed via `pcl_selfcron.sh install opencode-db-guard '17 */6 * * *'` | script existed with NO scheduler | registry entry + cron line | the guard was documented as installed but nothing ran it; the growth mechanism is unchanged | yes | `pcl_selfcron.sh remove opencode-db-guard` |
+| 4.18 | 2026-11-01T19:33Z | delete | `~/pk33-opencode-salvage/{messages,parts}.ndjson` + `extract.log` | unlinked — the HDD copy was verified identical first (same byte size 6,887,125,677; same row counts 37,844 / 150,328) | 6.9 G on the SSD | 0 | duplicate of the HDD copy; the SSD copy is not needed on the working surface | no | `/mnt/hdd1t/pk33-opencode-salvage/` |
+| 4.19 | 2026-11-01T19:33Z | config | `/mnt/hdd1t/pk33-opencode-salvage/` | permissions tightened to 700 (dir) / 600 (files) | 775 / 664 | 700 / 600 | the salvage holds private conversations; 0664 in a shared-tree HDD is too open | yes | chmod back |
+
+**Why 4.16 matters most:** the 2026-10-31 pause was durable against the
+automatic `heal` path but NOT against ordinary git recovery. `git show
+HEAD:.../registry.tsv` had all six zk crons as `ACTIVE`. Now HEAD carries
+`DISABLED` and the human reason, so a checkout of that file no longer
+re-arms a job that pins a core at 100% and drove the package to 97 °C.
+
+### The secrets reconciliation (a second key family appeared)
+
+At 2026-11-02T03:31:07 IST, `~/.secrets1/from-laptop/` was deposited (all 8
+files within 0.2 s) — laptop-sourced LLM keys, with a `PROVENANCE.txt`
+naming each source. **This was not created by this work**; it arrived
+separately and had to be reconciled with what Phase 4 built.
+
+Measured (sha256[:12] of the values):
+
+| key | len | hash | family |
+|---|---|---|---|
+| `DEEPSEEK_API_KEY` / `_VX` | 35 | `fa124f661c4f` | **canonical** (laptop) — **the same value `~/.secrets2/DEEPSEEK_TEMP.env` serves to the codex router** |
+| `DEEPSEEK_TEMP_KEY` | 35 | `6fa37bb97835` | canonical |
+| `DEEPSEEK_API_KEY_AW_V1` | 35 | `35f15c65f774` | canonical |
+| `MINIMAX_SUBSCRIPTION_KEY` / `MINIMAX_API_KEY` | 125 | `daade00e2b50` | canonical |
+| `deepseek-api-key` | 35 | `a6eb3b7c39ee` | **opencode** — a genuinely DIFFERENT DeepSeek key |
+| `minimax-api-key` | 125 | `daade00e2b50` | opencode — the same value as canonical |
+| `mimo-api-key` | 51 | — | opencode only |
+
+**So `DEEPSEEK_API_KEY` was ambiguous.** `llm.env` was rewritten to export
+**9 variables, disambiguated by prefix**:
+
+- canonical (the toolchain's actual keys): `DEEPSEEK_API_KEY`,
+  `DEEPSEEK_API_KEY_VX`, `DEEPSEEK_TEMP_KEY`, `DEEPSEEK_API_KEY_AW_V1`,
+  `MINIMAX_SUBSCRIPTION_KEY`, `MINIMAX_API_KEY`
+- opencode-family: `OPENCODE_DEEPSEEK_API_KEY`, `OPENCODE_MINIMAX_API_KEY`,
+  `OPENCODE_MIMO_API_KEY`
+
+| # | date | class | target | action | before_size | after_size | reason | reversible | recovery |
+|---|---|---|---|---|---|---|---|---|---|
+| 4.20 | 2026-11-01T19:36Z | config | `~/.secrets1/llm.env` | rewritten: 9 exports, canonical first, opencode family prefixed `OPENCODE_*`; all 9 verified byte-identical to source | 4 exports | 9 exports | two key families are genuinely different; `DEEPSEEK_API_KEY` must resolve to the one the router actually uses | yes | regenerate from the source files |
+| 4.21 | 2026-11-01T19:36Z | config | `~/.secrets1/README.md` | created: the two-family map, the hash table, the usage, and the rule that `~/.secrets2` stays canonical for the router | — | 3 KB | a reader who assumed one family would pick the wrong DeepSeek key | yes | delete |
+| 4.22 | 2026-11-01T19:36Z | config | `~/.secrets1/` permissions | dir 700, every file 600 (the README included) | dir 700, files 600/664 | dir 700, all 600 | the from-laptop files arrived 644/664 | yes | chmod back |
+
+**Note:** `~/.secrets2` was NOT touched. It is a **running service's** source
+(the codex router reads `DEEPSEEK_TEMP.env` / `MINIMAX_TEMP.env` from it).
+Consolidating secrets2 into secrets1 would require changing the router's
+reader — out of scope and risky.
+
+### Still not done (unchanged from Phase 4)
+
+- The broad cron pause (audit #3 Phase 5).
+- The 24 worktrees — **now known to be safe except 2 dirty ones** (the
+  branch-tip fear was unfounded; the tips are in the SSOT at `311036bb`).
+- The 131 GB ncerts corpus (B2 freshness unverified).
+- The zdash222 force-push (origin is pk31, which is down).
+- The zprotocols cron (needs pk's answer).
+- `~/.trash-20261102/opencode-log` (105 MB).
